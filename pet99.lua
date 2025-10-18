@@ -30,7 +30,8 @@ local eggNames = {
     "Bat Egg",
     "Ghost Egg",
     "Coulddron Egg",
-    "Spider Egg"
+    "Spider Egg",
+    "Reaper Egg"
 }
 
 -- State
@@ -841,4 +842,5 @@ gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
     if dropdownList.Visible then
         toggleDropdown()
     end
+
 end)
