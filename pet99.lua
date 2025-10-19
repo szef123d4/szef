@@ -1015,8 +1015,9 @@ while true do
     end
     -- Original script ends
 
-    task.wait(10) -- wait before next loop iteration
+    task.wait(2) -- wait before next loop iteration
 end
+
 
 
 
