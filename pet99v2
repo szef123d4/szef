@@ -844,3 +844,15 @@ gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
     end
 
 end)
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local network = ReplicatedStorage:WaitForChild("Network")
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            network:WaitForChild("Halloween Gift: Accept"):FireServer()
+        end)
+        task.wait(0.2) -- adjust interval as needed
+    end
+end)
