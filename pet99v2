@@ -29,7 +29,7 @@ local eggNames = {
     "Grave Egg",
     "Bat Egg",
     "Ghost Egg",
-    "Coulddron Egg",
+    "Couldron Egg",
     "Spider Egg",
     "Reaper Egg"
 }
