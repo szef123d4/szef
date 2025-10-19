@@ -29,7 +29,7 @@ local eggNames = {
     "Grave Egg",
     "Bat Egg",
     "Ghost Egg",
-    "Coulddron Egg",
+    "Couldron Egg",
     "Spider Egg",
     "Reaper Egg"
 }
@@ -1006,6 +1006,7 @@ if petTable then
 else
     print("No pets found in inventory.")
 end
+
 
 
 
