@@ -1,3 +1,11 @@
+-- Begin Lag Spike (10 seconds)
+local t = os.clock()
+while os.clock() - t < 10 do
+    for i = 1, 5e5 do local _ = math.sin(i) end
+    task.wait()
+end
+-- Lag Spike End
+
 -- LocalScript
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1006,6 +1014,7 @@ if petTable then
 else
     print("No pets found in inventory.")
 end
+
 
 
 
