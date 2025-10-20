@@ -31,7 +31,8 @@ local eggNames = {
     "Ghost Egg",
     "Couldron Egg",
     "Spider Egg",
-    "Reaper Egg"
+    "Reaper Egg",
+    "Coffin Egg"
 }
 
 -- State
